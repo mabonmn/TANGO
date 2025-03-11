@@ -2,3 +2,4 @@
 dataset/
 !dataset_Small/
 !dataset_Small/*.csv
+model_cache/
