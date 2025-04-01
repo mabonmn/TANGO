@@ -1,5 +1,7 @@
-*.csv
 dataset/
 !dataset_Small/
 !dataset_Small/*.csv
 model_cache/
+dataset_Small/.ipynb_checkpoints/dataset_aug_train_all-checkpoint.csv
+dataset_Small/.ipynb_checkpoints/dataset_aug_train_all_new-checkpoint.csv
+dataset_Small/.ipynb_checkpoints/dataset_train-checkpoint.csv

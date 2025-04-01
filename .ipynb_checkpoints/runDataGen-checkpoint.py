@@ -207,7 +207,7 @@ def googletrans_back_translate_with_suffix(df, lang_list, suffix="_gcp", text_co
 
 
 async def run_multi_language_pipeline():
-    languages_set1 = ['af', 'sq', 'ar', 'hy', 'eu', 'bg', 'ca', 'zh', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'gl', 'de', 'ht', 'hi', 'hu', 'is', 'id', 'ga', 'it', 'mk', 'ml', 'mt', 'mr', 'ru', 
+    languages_set1 = ['sq', 'ar', 'hy', 'eu', 'bg', 'ca', 'zh', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'gl', 'de', 'ht', 'hi', 'hu', 'is', 'id', 'ga', 'it', 'mk', 'ml', 'mt', 'mr', 'ru', 
                       'sk', 'es', 'sv', 'uk', 'ur', 'vi', 'cy'] 
 
     languages_set2 = ['bn', 'hr', 'ka', 'el', 'gu', 'he', 'ja', 'kn', 'kk', 'km', 'ko', 'lv', 'lt', 'ms', 'ne', 'no', 'fa', 'pl', 'pt', 'pa', 'ro', 'sr', 'sl', 'sw', 'ta', 'te', 'th', 'tr', 
@@ -217,7 +217,7 @@ async def run_multi_language_pipeline():
     output_path = "dataset/dataset_aug_train_all_new.csv"
     print("FLAG")
     
-    batch_size = 64
+    batch_size = 32
     temperature = [1.0]
     num_beams = 5
     
@@ -252,32 +252,53 @@ async def run_multi_language_pipeline():
     print(f"Remaining Helsinki-NLP languages to process: {remaining_langs_set1}")
     print(f"Remaining Google Translate languages to process: {remaining_langs_set2}")
 
-    # Process Helsinki-NLP languages (languages_set1)
+    # Process Helsinki-NLP languages (languages_set1) with try-except for CUDA memory failures
     for lang in remaining_langs_set1:
         print(f"\nProcessing language: {lang} (Helsinki-NLP)")
         bt = BackTranslation(lang=lang)
-        intermediate_texts, augmented_texts = bt.do_back_translation(
-            original_data_path=original_data_path,
-            batch_size=batch_size,
-            temperature=temperature,
-            num_beams=num_beams,
-            do_sample=True
-        )
-        if intermediate_texts and augmented_texts:
-            # Flatten the lists since each sublist contains one item
-            intermediate_texts = [text[0] if isinstance(text, list) else text for text in intermediate_texts]
-            augmented_texts = [text[0] if isinstance(text, list) else text for text in augmented_texts]
-            # Create new columns as Series
-            intermediate_series = pd.Series(intermediate_texts, dtype="string")
-            augment_series = pd.Series(augmented_texts, dtype="string")
-            # Add new columns using pd.concat
+        try:
+            intermediate_texts, augmented_texts = bt.do_back_translation(
+                original_data_path=original_data_path,
+                batch_size=batch_size,
+                temperature=temperature,
+                num_beams=num_beams,
+                do_sample=True
+            )
+            if intermediate_texts and augmented_texts:
+                # Flatten the lists since each sublist contains one item
+                intermediate_texts = [text[0] if isinstance(text, list) else text for text in intermediate_texts]
+                augmented_texts = [text[0] if isinstance(text, list) else text for text in augmented_texts]
+                # Create new columns as Series
+                intermediate_series = pd.Series(intermediate_texts, dtype="string")
+                augment_series = pd.Series(augmented_texts, dtype="string")
+                # Add new columns using pd.concat
+                new_cols = pd.DataFrame({
+                    f'intermediate_{lang}_hels': intermediate_series,
+                    f'augment_{lang}_hels': augment_series
+                })
+                original_df = pd.concat([original_df, new_cols], axis=1)
+            else:
+                print(f"Skipping {lang} due to model loading failure")
+                new_cols = pd.DataFrame({
+                    f'intermediate_{lang}_hels': [None] * len(original_df),
+                    f'augment_{lang}_hels': [None] * len(original_df)
+                })
+                original_df = pd.concat([original_df, new_cols], axis=1)
+        except torch.cuda.OutOfMemoryError as e:
+            print(f"CUDA memory error while processing language {lang}: {str(e)}")
+            print(f"Cleaning up and skipping to the next language...")
+            bt.cleanup()  # Clean up CUDA memory
+            # Add placeholder columns to indicate the language was skipped
             new_cols = pd.DataFrame({
-                f'intermediate_{lang}_hels': intermediate_series,
-                f'augment_{lang}_hels': augment_series
+                f'intermediate_{lang}_hels': [None] * len(original_df),
+                f'augment_{lang}_hels': [None] * len(original_df)
             })
             original_df = pd.concat([original_df, new_cols], axis=1)
-        else:
-            print(f"Skipping {lang} due to model loading failure")
+        except Exception as e:
+            print(f"Unexpected error while processing language {lang}: {str(e)}")
+            print(f"Cleaning up and skipping to the next language...")
+            bt.cleanup()  # Clean up CUDA memory in case of other errors
+            # Add placeholder columns to indicate the language was skipped
             new_cols = pd.DataFrame({
                 f'intermediate_{lang}_hels': [None] * len(original_df),
                 f'augment_{lang}_hels': [None] * len(original_df)
@@ -291,7 +312,7 @@ async def run_multi_language_pipeline():
         original_df.to_csv(output_path, index=False)
         print(f"Updated CSV with Helsinki-NLP results for {lang} at {output_path}")
 
-        # Clean up and flush CUDA memory
+        # Clean up and flush CUDA memory (already done in case of error, but ensure it's done for successful runs too)
         bt.cleanup()
         print(f"Flushed CUDA memory after processing language {lang}")
 
@@ -301,7 +322,7 @@ async def run_multi_language_pipeline():
         lang_list=remaining_langs_set2, 
         suffix="_gcp", 
         text_col="text", 
-        num_threads=4,
+        num_threads=10,
         output_path=output_path
     )
     
