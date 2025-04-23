@@ -67,7 +67,7 @@ class BackTranslation:
         pandas_text_dataset = TextDataset(self.en_lang_tokenizer, original_data_path=original_data_path)
         dataloader = DataLoader(
             pandas_text_dataset, shuffle=False, drop_last=False, num_workers=4, 
-            batch_size=batch_size, collate_fn=pandas_text_dataset.collate_fn
+            batch_size=32, collate_fn=pandas_text_dataset.collate_fn
         )
         text_num_list = pandas_text_dataset.text_num_list
         lang_out_list = []
@@ -79,7 +79,7 @@ class BackTranslation:
         lang_text_dataset = TextDataset(self.lang_en_tokenizer, text_data_list=lang_out_list)
         dataloader = DataLoader(
             lang_text_dataset, shuffle=False, drop_last=False, num_workers=4, 
-            batch_size=batch_size, collate_fn=lang_text_dataset.collate_fn
+            batch_size=32, collate_fn=lang_text_dataset.collate_fn
         )
         en_out_list = []
         for batch in tqdm(dataloader, desc=f"Translating back from {self.lang}"):
@@ -217,7 +217,7 @@ async def run_multi_language_pipeline():
     output_path = "dataset/dataset_aug_train_all_new.csv"
     print("FLAG")
     
-    batch_size = qqq
+    batch_size = 32
     temperature = [1.0]
     num_beams = 5
     
