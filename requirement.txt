@@ -1,2 +1,11 @@
 sentence_transformers
 seaborn
+torch
+transformers
+pandas
+numpy
+tqdm
+datasets
+nltk
+zss
+benepar
